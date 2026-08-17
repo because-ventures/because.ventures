@@ -1,0 +1,35 @@
+name: Fix first-party gtag after ExFlow sync
+
+# ExFlow syncs re-export the Webflow site, which reintroduces Webflow's
+# "first-party" gtag loader paths that 404 on GitHub Pages. Rewrite them
+# to the public googletagmanager.com loader so GA4 keeps firing.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  fix-gtag:
+    # Skip runs triggered by this workflow's own fix commit
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rewrite proxied gtag loaders
+        run: python3 scripts/fix_first_party_gtag.py .
+
+      - name: Commit and push if anything changed
+        run: |
+          if git diff --quiet; then
+            echo "No proxied gtag loaders found; nothing to do."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Rewrite Webflow first-party gtag loader to googletagmanager.com"
+          git push
