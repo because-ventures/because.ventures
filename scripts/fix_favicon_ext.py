@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
-"""Fix SVG icons that ExFlow exports with a .png extension.
+"""Fix the site icons that ExFlow exports as SVG content in .png files.
 
-ExFlow downloads the Webflow favicon/webclip correctly, but saves the SVG
-sources as images/favicon.png and images/app-icon.png. Served as image/png,
-browsers refuse to render the SVG payload, so no favicon shows. Copy each
-SVG-content .png icon to a .svg twin and point the <link> tags at it.
+ExFlow downloads the Webflow favicon/webclip correctly, but the sources are
+SVGs and it saves them as images/favicon.png and images/app-icon.png. Served
+as image/png with SVG payloads, browsers render nothing. Rather than serving
+the SVGs (unsupported by Safari and iOS webclips), we keep pre-rendered real
+PNGs in scripts/assets/ — favicon-32.png and apple-touch-icon.png — copy them
+into images/, and point every page's <link> icon tags at them.
 
-Idempotent: re-copies from the (possibly re-synced) .png source and the
-href rewrite is a no-op once applied.
+Master copies live in scripts/assets/ so an ExFlow re-sync of images/ cannot
+clobber them. Idempotent: copies overwrite identically and the href rewrite
+is a no-op once applied.
 """
 
 import re
@@ -15,47 +18,37 @@ import shutil
 import sys
 from pathlib import Path
 
-ICONS = ["favicon.png", "app-icon.png"]
+ICONS = {
+    # link-href stem -> committed real-PNG asset
+    "favicon": "favicon-32.png",
+    "app-icon": "apple-touch-icon.png",
+}
 LINK_RE = re.compile(
-    r'(<link href=")((?:\.\./)*images/)(favicon|app-icon)\.png(")'
+    r'(<link href=")((?:\.\./)*images/)(favicon|app-icon)\.(?:png|svg)(")'
 )
-
-
-def is_svg(path: Path) -> bool:
-    head = path.read_bytes()[:200].lstrip()
-    return head.startswith(b"<svg") or (head.startswith(b"<?xml") and b"<svg" in head)
 
 
 def main():
     root = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(".")
-    fixed_icons = set()
-    for name in ICONS:
-        src = root / "images" / name
-        if src.is_file() and is_svg(src):
-            dst = src.with_suffix(".svg")
-            shutil.copyfile(src, dst)
-            fixed_icons.add(Path(name).stem)
-            print(f"copied {src} -> {dst}")
-
-    if not fixed_icons:
-        print("no SVG-content .png icons found; nothing to do")
-        return
+    assets = root / "scripts" / "assets"
+    for asset in ICONS.values():
+        src = assets / asset
+        if not src.is_file():
+            raise SystemExit(f"missing master asset {src}")
+        shutil.copyfile(src, root / "images" / asset)
+        print(f"copied {src} -> images/{asset}")
 
     changed = 0
     for page in sorted(root.rglob("*.html")):
         html = page.read_text(encoding="utf-8")
         new = LINK_RE.sub(
-            lambda m: (
-                f"{m.group(1)}{m.group(2)}{m.group(3)}.svg{m.group(4)}"
-                if m.group(3) in fixed_icons
-                else m.group(0)
-            ),
+            lambda m: f"{m.group(1)}{m.group(2)}{ICONS[m.group(3)]}{m.group(4)}",
             html,
         )
         if new != html:
             page.write_text(new, encoding="utf-8")
             changed += 1
-    print(f"{changed} page(s) updated to reference .svg icons")
+    print(f"{changed} page(s) updated to reference real PNG icons")
 
 
 if __name__ == "__main__":
