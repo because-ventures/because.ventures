@@ -25,6 +25,9 @@ jobs:
       - name: Fix SVG icons exported with .png extension
         run: python3 scripts/fix_favicon_ext.py .
 
+      - name: Absolutize og:image / twitter:image URLs
+        run: python3 scripts/fix_og_image.py .
+
       - name: Commit and push if anything changed
         run: |
           if git diff --quiet; then
