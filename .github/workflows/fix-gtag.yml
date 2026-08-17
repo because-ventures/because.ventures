@@ -22,9 +22,6 @@ jobs:
       - name: Rewrite proxied gtag loaders
         run: python3 scripts/fix_first_party_gtag.py .
 
-      - name: Fix SVG icons exported with .png extension
-        run: python3 scripts/fix_favicon_ext.py .
-
       - name: Absolutize og:image / twitter:image URLs
         run: python3 scripts/fix_og_image.py .
 
